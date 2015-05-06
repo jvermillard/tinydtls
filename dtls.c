@@ -3737,32 +3737,12 @@ dtls_handle_message(dtls_context_t *ctx,
 }
 
 dtls_context_t *
-dtls_new_context(void *app_data) {
+dtls_new_context(void *app_data, unsigned long rng_seed) {
   dtls_context_t *c;
   dtls_tick_t now;
-#ifndef WITH_CONTIKI
-  FILE *urandom = fopen("/dev/urandom", "r");
-  unsigned char buf[sizeof(unsigned long)];
-#endif /* WITH_CONTIKI */
-
   dtls_ticks(&now);
-#ifdef WITH_CONTIKI
-  /* FIXME: need something better to init PRNG here */
-  dtls_prng_init(now);
-#else /* WITH_CONTIKI */
-  if (!urandom) {
-    dtls_emerg("cannot initialize PRNG\n");
-    return NULL;
-  }
 
-  if (fread(buf, 1, sizeof(buf), urandom) != sizeof(buf)) {
-    dtls_emerg("cannot initialize PRNG\n");
-    return NULL;
-  }
-
-  fclose(urandom);
-  dtls_prng_init((unsigned long)*buf);
-#endif /* WITH_CONTIKI */
+  dtls_prng_init(rng_seed);
 
   c = malloc_context();
   if (!c)
@@ -3770,13 +3750,13 @@ dtls_new_context(void *app_data) {
 
   memset(c, 0, sizeof(dtls_context_t));
   c->app = app_data;
-  
+
   LIST_STRUCT_INIT(c, sendqueue);
 
 #ifdef WITH_CONTIKI
   LIST_STRUCT_INIT(c, peers);
   /* LIST_STRUCT_INIT(c, key_store); */
-  
+
   process_start(&dtls_retransmit_process, (char *)c);
   PROCESS_CONTEXT_BEGIN(&dtls_retransmit_process);
   /* the retransmit timer must be initialized to some large value */
@@ -3786,9 +3766,9 @@ dtls_new_context(void *app_data) {
 
   if (dtls_prng(c->cookie_secret, DTLS_COOKIE_SECRET_LENGTH))
     c->cookie_secret_age = now;
-  else 
+  else
     goto error;
-  
+
   return c;
 
  error:

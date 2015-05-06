@@ -254,6 +254,33 @@ static dtls_handler_t cb = {
 #endif /* DTLS_ECC */
 };
 
+static unsigned long get_random_seed() {
+#ifndef WITH_CONTIKI
+  FILE *urandom = fopen("/dev/urandom", "r");
+  unsigned char buf[sizeof(unsigned long)];
+#endif /* WITH_CONTIKI */
+
+#ifdef WITH_CONTIKI
+  /* FIXME: need something better to init PRNG here */
+  dtls_tick_t now;
+  dtls_ticks(&now);
+  return now;
+#else /* WITH_CONTIKI */
+  if (!urandom) {
+    dtls_emerg("cannot initialize PRNG\n");
+    exit(-1);
+  }
+
+  if (fread(buf, 1, sizeof(buf), urandom) != sizeof(buf)) {
+    dtls_emerg("cannot initialize PRNG\n");
+    exit(-1);
+  }
+
+  fclose(urandom);
+  return (unsigned long)*buf;
+#endif /* WITH_CONTIKI */
+}
+
 int 
 main(int argc, char **argv) {
   dtls_context_t *the_context = NULL;
@@ -331,7 +358,7 @@ main(int argc, char **argv) {
 
   dtls_init();
 
-  the_context = dtls_new_context(&fd);
+  the_context = dtls_new_context(&fd, get_random_seed());
 
   dtls_set_handler(the_context, &cb);
 

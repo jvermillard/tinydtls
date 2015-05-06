@@ -279,6 +279,33 @@ resolve_address(const char *server, struct sockaddr *dst) {
   return -1;
 }
 
+static unsigned long get_random_seed() {
+#ifndef WITH_CONTIKI
+  FILE *urandom = fopen("/dev/urandom", "r");
+  unsigned char buf[sizeof(unsigned long)];
+#endif /* WITH_CONTIKI */
+
+#ifdef WITH_CONTIKI
+  /* FIXME: need something better to init PRNG here */
+  dtls_tick_t now;
+  dtls_ticks(&now);
+  return now;
+#else /* WITH_CONTIKI */
+  if (!urandom) {
+    dtls_emerg("cannot initialize PRNG\n");
+    exit(-1);
+  }
+
+  if (fread(buf, 1, sizeof(buf), urandom) != sizeof(buf)) {
+    dtls_emerg("cannot initialize PRNG\n");
+    exit(-1);
+  }
+
+  fclose(urandom);
+  return (unsigned long)*buf;
+#endif /* WITH_CONTIKI */
+}
+
 /*---------------------------------------------------------------------------*/
 static void
 usage( const char *program, const char *version) {
@@ -321,8 +348,10 @@ static dtls_handler_t cb = {
 #define DTLS_CLIENT_CMD_CLOSE "client:close"
 #define DTLS_CLIENT_CMD_RENEGOTIATE "client:renegotiate"
 
+
 int 
 main(int argc, char **argv) {
+
   fd_set rfds, wfds;
   struct timeval timeout;
   unsigned short port = DEFAULT_PORT;
@@ -443,7 +472,7 @@ main(int argc, char **argv) {
     return EXIT_FAILURE;
   }
 
-  dtls_context = dtls_new_context(&fd);
+  dtls_context = dtls_new_context(&fd, get_random_seed());
   if (!dtls_context) {
     dtls_emerg("cannot create context\n");
     exit(-1);
